@@ -1,0 +1,18 @@
+Nome_stazione,Localita,Latitude,Longitude,Altezza,Misure,URL
+Alessandra,Cape King,-73.58611111,166.6211111,160,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_ALESSANDRA/index.php
+Arelis,Cape Ross,-76.715,162.97,150,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_ARELIS/index.php
+Concordia,Dome C,-75.1,123.4,3230,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_CONCORDIA/index.php
+Eneide,Terra Nova Bay,-74.69583333,164.0922222,91,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_ENEIDE/index.php
+Guilia,Mid Point,-75.53611111,145.8588889,2510,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_GUILIA/index.php
+Irene,Sistry,-71.6525,148.6555556,2094,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_IRENE/index.php
+Jennica,Terra Nova Bay,-74.69444444,164.1177778,20,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_JENNICA/index.php
+Lola,Sarao Point,-74.135,163.4305556,1621,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_LOLA/index.php
+Lucia,Largen Glacier,-74.95055556,161.8219444,1250,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_LUCIA/index.php
+Maria,Mount Browning,-73.62638889,164.0111111,355,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_MARIA/index.php
+Modesta,Priestley Névé,-73.63916667,160.6455556,1924,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_MODESTA/index.php
+Paola,Talos Dome,-72.63916667,159.1933333,2370,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_PAOLA/index.php
+Rita,Enigma Lake,-74.725,164.0330556,268,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_RITA/index.php
+Silvia,Cape Phillips,-73.05,169.6,568,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_SILVIA/index.php
+Sofia,Narsen ice sheet,-74.81666667,163.2333333,40,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_SOFIA/index.php
+Sofiab,David Glacier,-75.61166667,158.5905556,1552,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_SOFIAB/index.php
+Zoraida,Terra Nova Bay,-74.16,162.7391667,880,"P, T, U, V, D",http://www.climantartide.it/dataaccess/AWS_ZORAIDA/index.php
