@@ -1,3 +1,29 @@
+# Marconi AWS Observer Dashboard — ENEA / PNRA (AUSDA-CON 2026)
+
+Dashboard web e architettura di simulazione IoT Edge per il monitoraggio meteorologico, diagnostico e strutturale delle 17 stazioni automatiche antartiche (**AWS**) gestite da **ENEA / PNRA / IAMCO**.
+
+## Architettura & 5 Indicatori Diagnostici
+
+Il sistema integra la telemetria meteorologica AWS con il monitoraggio dell'inclinazione strutturale basato su accelerometro MEMS triassiale a **25 Hz** (hardware target: **`STM32 NUCLEO-F401RE` + `X-NUCLEO-IKS02A1` / `IIS2DLPC`**):
+
+1. **Battery Stress** (`V/h`): massima discesa oraria della tensione batteria in finestra di **12 ore** con `T < -20 °C`.
+2. **Ice Locking** (`h`): ore consecutive con vento nullo, direzione invariata e `T < -20 °C` (possibile blocco anemometro).
+3. **Thermal Shock Rate** (`°C/h`): massima variazione negativa oraria della temperatura.
+4. **Data Gap Rate** (`%`): percentuale di slot orari mancanti nelle ultime 24 ore.
+5. **Structural Tilt** (`°`): inclinazione strutturale rilevata a `25 Hz` (`25 campioni/s`, `1500 campioni/minuto`) tramite:
+   - Calibrazione iniziale sui primi **5 secondi** (`125` campioni) per il vettore medio di riferimento;
+   - Calcolo dell'angolo rispetto al riferimento;
+   - **Mediana su finestra di 1 secondo** (`25` campioni);
+   - **Media mobile su 10 valori mediani consecutivi** (`10` secondi);
+   - Classificazione: `NORMAL` (`[0°, 2°[`), `WARNING` (`[2°, 5°[`), `CRITICAL` (`[5°, +∞[`).
+
+### Simulatori Python (`simulators/`)
+
+- **Simulatore AWS (`simulators/aws_simulator.py`)**: legge i dataset CSV di scenario e trasmette la telemetria via `HTTP POST/JSON` a `POST /api/telemetry`.
+- **Simulatore IoT Edge (`simulators/iot_edge_simulator.py`)**: genera lo stream MEMS `(timestamp, ax, ay, az)` a `25 Hz` in CSV, simula l'elaborazione edge del microcontrollore `NUCLEO-F401RE` + `IIS2DLPC` e invia il pacchetto via `HTTP POST/JSON` a `POST /api/edge/tilt`.
+
+---
+
 ## Prerequisiti – Installazione e configurazione di Python
 
 Il backend di **Antarctic Observatory** è sviluppato in Python e utilizza FastAPI, Pydantic e SQLite.
@@ -189,3 +215,78 @@ __pycache__/
 ```
 
 Ogni studente dovrà creare il proprio ambiente virtuale sul computer utilizzato per lo sviluppo.
+
+---
+
+## Installazione e Configurazione del Frontend (React + Vite)
+
+L'interfaccia cartografica interattiva (`frontend/`) è sviluppata in **React 18**, **Vite 6**, **Leaflet / Proj4Leaflet** (`EPSG:3031`) e **Recharts**.
+
+### 1. Verificare se Node.js e npm sono installati
+
+Aprire un terminale (PowerShell su Windows, Terminale su Linux/macOS) ed eseguire:
+
+```bash
+node --version
+npm --version
+```
+
+Il progetto richiede **Node.js 18 LTS o superiore** (consigliato **Node.js 20 LTS** o **22 LTS**) con `npm` incluso.
+
+Se il comando non è riconosciuto:
+- **Windows / macOS**: scaricare e installare la versione **LTS** dal sito ufficiale [https://nodejs.org/](https://nodejs.org/) (su Windows assicurarsi che l'opzione *Add to PATH* sia attiva, quindi riaprire il terminale).
+- **Linux (Ubuntu / Debian)**: installare Node.js LTS tramite `nvm` o gestore pacchetti (`curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs`).
+
+### 2. Installare le dipendenze del Frontend
+
+Posizionarsi nella cartella `frontend` del progetto ed eseguire:
+
+```bash
+cd frontend
+npm install
+```
+
+Questo comando scarica in `frontend/node_modules` tutte le librerie dichiarate in `package.json` (`react`, `react-dom`, `leaflet`, `react-leaflet`, `proj4`, `proj4leaflet`, `recharts`, `vite`).
+
+### 3. Avviare il server di sviluppo Frontend
+
+Sempre dalla cartella `frontend`:
+
+```bash
+npm run dev
+```
+
+Il frontend sarà accessibile dal browser all'indirizzo:
+
+- **Dashboard Web:** `http://localhost:5173`
+
+> **Nota:** Assicurarsi che anche il Backend FastAPI sia in esecuzione su `http://localhost:8000` (se il backend gira su un indirizzo o porta diversa, impostare `VITE_API_URL` in `frontend/.env`).
+
+### 4. Avvio Rapido Unificato (Linux / macOS / WSL)
+
+Dalla root del progetto è disponibile lo script automatico che prepara sia il virtualenv Python (`backend/.venv`) sia `frontend/node_modules` e avvia entrambi i server in parallelo:
+
+```bash
+./start.sh
+```
+
+### 5. Avvio dei Simulatori Esterni (`simulators/`)
+
+Con il backend attivo su `http://localhost:8000`, è possibile lanciare da un nuovo terminale i due simulatori Python standalone (zero dipendenze esterne):
+
+```bash
+# Simulatore AWS (telemetria meteo e diagnostica da CSV -> POST /api/telemetry)
+python3 simulators/aws_simulator.py --interval 0.2
+
+# Simulatore IoT Edge MEMS 25 Hz (NUCLEO-F401RE + IIS2DLPC -> POST /api/edge/tilt)
+python3 simulators/iot_edge_simulator.py --station PAOLA --target-tilt 3.2 --duration 60
+```
+
+### 6. Build di Produzione Frontend (opzionale)
+
+Per generare i file statici ottimizzati in `frontend/dist/`:
+
+```bash
+cd frontend
+npm run build
+```
