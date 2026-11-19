@@ -1,107 +1,329 @@
-import React, { useEffect, useRef } from 'react';
-import L from 'leaflet';
-import { MapContainer, WMSTileLayer, Marker, Popup, LayersControl, ScaleControl } from 'react-leaflet';
-import 'proj4';
-import 'proj4leaflet';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import L from "leaflet";
+import {
+  MapContainer,
+  WMSTileLayer,
+  Marker,
+  ScaleControl,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
+import { BASES } from "../constants/awsConfig";
+import {
+  polarCRS,
+  wmsEndpoint,
+  wmsBase,
+  nasaDate,
+} from "./polarMapConfig";
 
-// EPSG:3031 Antarctic polar stereographic. Leaflet markers and WMS imagery
-// now share the exact same CRS and geographic-to-projected transformation.
-const polarCRS = new L.Proj.CRS(
-  'EPSG:3031',
-  '+proj=stere +lat_0=-90 +lat_ts=-71 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs',
-  {
-    origin: [-4194304, 4194304],
-    resolutions: [16384, 8192, 4096, 2048, 1024, 512, 256, 128],
-    bounds: L.bounds([-4194304, -4194304], [4194304, 4194304])
+export const bases = BASES;
+
+/**
+ * Compute small radial screen-space offsets for markers that overlap at the current zoom,
+ * keeping their underlying geographic lat/lon untouched and collapsing to (0, 0) once zoomed in.
+ */
+function computeClusterOffsets(items, zoom) {
+  const offsets = {};
+  if (zoom >= 9 || items.length < 2) return offsets;
+
+  const minDistPx = 22;
+  const projected = items
+    .filter((it) => it.latitude != null && it.longitude != null)
+    .map((it) => ({
+      code: it.code,
+      pt: polarCRS.latLngToPoint(L.latLng(it.latitude, it.longitude), zoom),
+    }));
+
+  const visited = new Set();
+  for (let i = 0; i < projected.length; i++) {
+    if (visited.has(i)) continue;
+    const queue = [i];
+    visited.add(i);
+    const group = [];
+    while (queue.length > 0) {
+      const idx = queue.shift();
+      group.push(projected[idx]);
+      for (let j = 0; j < projected.length; j++) {
+        if (visited.has(j)) continue;
+        const dx = projected[idx].pt.x - projected[j].pt.x;
+        const dy = projected[idx].pt.y - projected[j].pt.y;
+        if (Math.hypot(dx, dy) < minDistPx) {
+          visited.add(j);
+          queue.push(j);
+        }
+      }
+    }
+    if (group.length >= 2) {
+      group.sort((a, b) => a.code.localeCompare(b.code));
+      const radius = Math.max(14, group.length * 4.5);
+      group.forEach((member, idx) => {
+        const angle = (2 * Math.PI * idx) / group.length - Math.PI / 4;
+        offsets[member.code] = {
+          dx: Math.round(radius * Math.cos(angle)),
+          dy: Math.round(radius * Math.sin(angle)),
+        };
+      });
+    }
   }
-);
-
-// GIBS WMS (not WMTS) accepts the projected BBOX requested by Leaflet.
-// This avoids a mismatch between Leaflet zooms and NASA WMTS TileMatrixSet.
-const wmsEndpoint = 'https://gibs.earthdata.nasa.gov/wms/epsg3031/best/wms.cgi';
-const wmsBase = {
-  version: '1.1.1', // EPSG:3031 axis order is unambiguous here
-  format: 'image/jpeg',
-  transparent: false,
-  tileSize: 256,
-  attribution: 'NASA GIBS / NASA Earthdata',
-  noWrap: true,
-};
-
-const icon = L.divIcon({ className: 'aws-icon', html: '<span class="aws-pulse"><i></i></span>', iconSize: [20,20], iconAnchor: [10,10] });
-const selectedIcon = L.divIcon({ className: 'aws-icon aws-selected', html: '<span class="aws-pulse"><i></i></span>', iconSize: [26,26], iconAnchor: [13,13] });
-const baseIcon = L.divIcon({ className: 'base-icon', html: '<span class="base-star">★</span>', iconSize: [32,32], iconAnchor: [16,16] });
-const selectedBaseIcon = L.divIcon({ className: 'base-icon base-selected', html: '<span class="base-star">★</span>', iconSize: [36,36], iconAnchor: [18,18] });
-// Coordinate pubblicate dal PNRA/COMNAP, distinte dalle AWS del CSV.
-export const bases = [
-  { code: 'BASE_CONCORDIA', name: 'Base Concordia', location: 'Dome C', latitude: -75.1, longitude: 123.35, altitude_m: 3233, source_url: 'https://www.pnra.aq/it/stazione-concordia' },
-  { code: 'BASE_MZS', name: 'Base Mario Zucchelli', location: 'Baia Terra Nova', latitude: -(74 + 41/60 + 42/3600), longitude: 164 + 7/60 + 23/3600, altitude_m: 15, source_url: 'https://www.pnra.aq/' }
-];
-const date = import.meta.env.VITE_NASA_DATE || '2025-01-15';
-
-
-function StationMarker({ station, selected, onSelect }) {
-  const markerRef = useRef(null);
-  const active = selected === station.code;
-  useEffect(() => {
-    if (active) markerRef.current?.openPopup();
-    else markerRef.current?.closePopup();
-  }, [active]);
-
-  return <Marker
-    ref={markerRef}
-    position={[station.latitude, station.longitude]}
-    icon={active ? selectedIcon : icon}
-    zIndexOffset={active ? 1000 : 0}
-    eventHandlers={{ click: () => onSelect(station.code) }}
-  >
-    <Popup><div className="popup-station"><strong>{station.name}</strong><br/>{station.location}<br/>Quota: {station.altitude_m} m<br/>Lat: {station.latitude.toFixed(5)}<br/>Lon: {station.longitude.toFixed(5)}<br/><a href={station.source_url} target="_blank" rel="noreferrer">Scheda ClimAntartide</a></div></Popup>
-  </Marker>;
+  return offsets;
 }
 
-function BaseMarker({ base, selected, onSelect }) {
-  const markerRef = useRef(null);
-  const active = selected === base.code;
-  useEffect(() => {
-    if (active) markerRef.current?.openPopup();
-    else markerRef.current?.closePopup();
-  }, [active]);
-  return <Marker
-    ref={markerRef}
-    position={[base.latitude, base.longitude]}
-    icon={active ? selectedBaseIcon : baseIcon}
-    zIndexOffset={active ? 2000 : 1500}
-    eventHandlers={{ click: () => onSelect(base.code) }}
-  >
-    <Popup><div className="popup-station"><strong>★ {base.name}</strong><br/>{base.location}<br/>Base di ricerca PNRA<br/>Quota: {base.altitude_m} m<br/>Lat: {base.latitude.toFixed(5)}<br/>Lon: {base.longitude.toFixed(5)}<br/><a href={base.source_url} target="_blank" rel="noreferrer">Informazioni ufficiali PNRA</a><br/><small>Base logistica: non è una misura AWS.</small></div></Popup>
-  </Marker>;
+function createStationDotIcon(name, active, status, offset = { dx: 0, dy: 0 }) {
+  const s = (status || "NO_DATA").toLowerCase();
+  const activeClass = active ? "is-selected" : "";
+  const criticalClass = s === "critical" ? "is-critical" : "";
+  const labelAlways =
+    active || s === "warning" || s === "critical" ? "always-visible" : "";
+
+  return L.divIcon({
+    className: "aws-dot-marker-wrap",
+    html: `
+      <div class="aws-dot-node ${s} ${activeClass} ${criticalClass}">
+        <span class="aws-dot"></span>
+        <span class="aws-dot-pulse"></span>
+        <span class="aws-dot-label ${labelAlways}">${name}</span>
+      </div>
+    `,
+    iconSize: [16, 16],
+    iconAnchor: [8 - offset.dx, 8 - offset.dy],
+  });
 }
 
-export default function PolarMap({ stations, selected, onSelect }) {
-  const mapRef = useRef(null);
-  const previousSelected = useRef(null);
+function createBaseDotIcon(name, active, offset = { dx: 0, dy: 0 }) {
+  const activeClass = active ? "is-selected" : "";
+  const labelAlways = active ? "always-visible" : "";
+  return L.divIcon({
+    className: "base-dot-marker-wrap",
+    html: `
+      <div class="base-diamond-node ${activeClass}">
+        <span class="base-diamond"></span>
+        <span class="base-dot-label ${labelAlways}">${name}</span>
+      </div>
+    `,
+    iconSize: [14, 14],
+    iconAnchor: [7 - offset.dx, 7 - offset.dy],
+  });
+}
+
+function MapCameraController({ focusTarget }) {
+  const map = useMap();
+  const prevTargetRef = useRef(null);
 
   useEffect(() => {
-    if (!selected || previousSelected.current === selected) return;
-    const station = [...stations, ...bases].find(s => s.code === selected);
-    if (!station || !mapRef.current) return;
-    // La selezione dal pannello sposta la vista e apre il popup del POI.
-    // Non cambia il sistema di riferimento EPSG:3031.
-    mapRef.current.setView([station.latitude, station.longitude], Math.max(mapRef.current.getZoom(), 4), { animate: previousSelected.current !== null });
-    previousSelected.current = selected;
-  }, [selected, stations]);
+    if (!focusTarget) return;
 
-  return <MapContainer ref={mapRef} className="polar-map" crs={polarCRS} center={[bases[1].latitude, bases[1].longitude]} zoom={4} minZoom={0} maxZoom={7} zoomControl={true}>
-    <LayersControl position="topright">
-      <LayersControl.BaseLayer checked name="NASA MODIS True Color (250 m)">
-        <WMSTileLayer url={wmsEndpoint} {...wmsBase} layers="MODIS_Terra_CorrectedReflectance_TrueColor" time={date} />
-      </LayersControl.BaseLayer>
-      <LayersControl.BaseLayer name="NASA VIIRS True Color (500 m)">
-        <WMSTileLayer url={wmsEndpoint} {...wmsBase} layers="VIIRS_SNPP_CorrectedReflectance_TrueColor" time={date} />
-      </LayersControl.BaseLayer>
-    </LayersControl>
-    <ScaleControl position="bottomleft" />
-    {stations.map(s => <StationMarker key={s.code} station={s} selected={selected} onSelect={onSelect} />)}
-    {bases.map(b => <BaseMarker key={b.code} base={b} selected={selected} onSelect={onSelect} />)}
-  </MapContainer>;
+    let targetLat, targetLon, targetZoom, seqKey;
+    if (focusTarget === "overview") {
+      targetLat = BASES[1].latitude;
+      targetLon = BASES[1].longitude;
+      targetZoom = 3;
+      seqKey = "overview";
+    } else if (focusTarget.lat != null && focusTarget.lon != null) {
+      targetLat = focusTarget.lat;
+      targetLon = focusTarget.lon;
+      targetZoom = focusTarget.zoom ?? 6;
+      seqKey = focusTarget.seq ?? "";
+    } else {
+      return;
+    }
+
+    const key = `${Number(targetLat).toFixed(4)},${Number(targetLon).toFixed(4)},${targetZoom},${seqKey}`;
+    if (prevTargetRef.current === key) return;
+    prevTargetRef.current = key;
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    map.stop();
+    if (prefersReducedMotion) {
+      map.setView([targetLat, targetLon], targetZoom);
+    } else {
+      map.flyTo([targetLat, targetLon], targetZoom, { duration: 1.1 });
+    }
+  }, [focusTarget, map]);
+
+  return null;
+}
+
+function MapZoomControls({ onResetOverview }) {
+  const map = useMap();
+  const containerRef = useRef(null);
+  const [zoom, setZoom] = useState(() => map.getZoom());
+
+  useMapEvents({
+    zoomend: () => setZoom(map.getZoom()),
+  });
+
+  useEffect(() => {
+    if (containerRef.current) {
+      L.DomEvent.disableClickPropagation(containerRef.current);
+      L.DomEvent.disableScrollPropagation(containerRef.current);
+    }
+  }, []);
+
+  return (
+    <div ref={containerRef} className="map-zoom-controls" aria-label="Controlli zoom mappa">
+      <button
+        type="button"
+        className="map-zoom-btn"
+        onClick={() => map.zoomIn()}
+        disabled={zoom >= map.getMaxZoom()}
+        title="Zoom avanti (+)"
+        aria-label="Zoom avanti"
+      >
+        +
+      </button>
+      <span className="map-zoom-level tabular-nums" title="Livello zoom corrente">
+        z{zoom}
+      </span>
+      <button
+        type="button"
+        className="map-zoom-btn"
+        onClick={() => map.zoomOut()}
+        disabled={zoom <= map.getMinZoom()}
+        title="Zoom indietro (-)"
+        aria-label="Zoom indietro"
+      >
+        −
+      </button>
+      <button
+        type="button"
+        className="map-zoom-btn map-zoom-reset"
+        onClick={() => {
+          map.stop();
+          map.flyTo([BASES[1].latitude, BASES[1].longitude], 3, { duration: 0.9 });
+          onResetOverview?.();
+        }}
+        title="Vista panoramica Antartide (z3)"
+        aria-label="Reset vista panoramica"
+      >
+        ⌖
+      </button>
+    </div>
+  );
+}
+
+function MapMarkersLayer({
+  stations,
+  selected,
+  onSelect,
+  health,
+  activeLayerMetric,
+}) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(() => map.getZoom());
+
+  useMapEvents({
+    zoomend: () => setZoom(map.getZoom()),
+    click: () => onSelect?.(null),
+  });
+
+  const clusterOffsets = useMemo(
+    () => computeClusterOffsets([...stations, ...BASES], zoom),
+    [stations, zoom],
+  );
+
+  return (
+    <>
+      {stations.map((s) => {
+        const h = health.find((x) => x.station_code === s.code);
+        let metricStatus = "NO_DATA";
+        if (h) {
+          metricStatus =
+            activeLayerMetric === "overall"
+              ? h.overall || "NO_DATA"
+              : h.indicators?.[activeLayerMetric]?.status || "NO_DATA";
+        }
+        const active = selected === s.code;
+        const icon = createStationDotIcon(
+          s.name,
+          active,
+          metricStatus,
+          clusterOffsets[s.code],
+        );
+
+        return (
+          <Marker
+            key={s.code}
+            position={[s.latitude, s.longitude]}
+            icon={icon}
+            zIndexOffset={active ? 1000 : 100}
+            eventHandlers={{
+              click: (e) => {
+                L.DomEvent.stopPropagation(e);
+                onSelect?.(s.code);
+              },
+            }}
+          />
+        );
+      })}
+
+      {BASES.map((b) => {
+        const active = selected === b.code;
+        const icon = createBaseDotIcon(b.name, active, clusterOffsets[b.code]);
+        return (
+          <Marker
+            key={b.code}
+            position={[b.latitude, b.longitude]}
+            icon={icon}
+            zIndexOffset={active ? 2000 : 1500}
+            eventHandlers={{
+              click: (e) => {
+                L.DomEvent.stopPropagation(e);
+                onSelect?.(b.code);
+              },
+            }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+export default function PolarMap({
+  stations = [],
+  selected,
+  onSelect,
+  health = [],
+  activeLayerMetric = "overall",
+  mapLayer = "MODIS",
+  focusTarget = null,
+  onResetOverview,
+}) {
+  const layerName =
+    mapLayer === "VIIRS"
+      ? "VIIRS_SNPP_CorrectedReflectance_TrueColor"
+      : "MODIS_Terra_CorrectedReflectance_TrueColor";
+
+  return (
+    <MapContainer
+      className="polar-map"
+      crs={polarCRS}
+      center={[BASES[1].latitude, BASES[1].longitude]}
+      zoom={3}
+      minZoom={0}
+      maxZoom={10}
+      zoomControl={false}
+    >
+      <WMSTileLayer
+        key={mapLayer}
+        url={wmsEndpoint}
+        {...wmsBase}
+        layers={layerName}
+        time={nasaDate}
+        maxNativeZoom={7}
+      />
+      <ScaleControl position="bottomleft" />
+      <MapCameraController focusTarget={focusTarget} />
+      <MapZoomControls onResetOverview={onResetOverview} />
+      <MapMarkersLayer
+        stations={stations}
+        selected={selected}
+        onSelect={onSelect}
+        health={health}
+        activeLayerMetric={activeLayerMetric}
+      />
+    </MapContainer>
+  );
 }
