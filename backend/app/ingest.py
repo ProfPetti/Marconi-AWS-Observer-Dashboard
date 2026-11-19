@@ -14,6 +14,7 @@ ALIASES = {
     "humidity_pct": ["humidity_pct", "humidity", "rh", "u"],
     "wind_speed_kt": ["wind_speed_kt", "wind_speed", "windspeed", "v"],
     "wind_direction_deg": ["wind_direction_deg", "wind_direction", "winddir", "d"],
+    "tilt_deg": ["tilt_deg", "tilt", "structural_tilt", "inclinazione"],
 }
 
 
@@ -35,7 +36,7 @@ def normalize_frame(raw: pd.DataFrame) -> pd.DataFrame:
     df["station_code"] = df["station_code"].astype(str).str.strip().str.upper().str.replace(" ", "_", regex=False)
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce", utc=True).dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     df = df.dropna(subset=["timestamp"])
-    for c in ["battery_v", "temperature_c", "pressure_hpa", "humidity_pct", "wind_speed_kt", "wind_direction_deg"]:
+    for c in ["battery_v", "temperature_c", "pressure_hpa", "humidity_pct", "wind_speed_kt", "wind_direction_deg", "tilt_deg"]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     return df[list(ALIASES)].drop_duplicates(subset=["station_code", "timestamp"])
 
@@ -57,6 +58,7 @@ def import_csv_bytes(db, content: bytes):
             "humidity_pct": None if pd.isna(r.humidity_pct) else float(r.humidity_pct),
             "wind_speed_kt": None if pd.isna(r.wind_speed_kt) else float(r.wind_speed_kt),
             "wind_direction_deg": None if pd.isna(r.wind_direction_deg) else float(r.wind_direction_deg),
+            "tilt_deg": None if pd.isna(r.tilt_deg) else float(r.tilt_deg),
             "source": "HISTORICAL", "quality": "NOT_ASSESSED", "imported_at": now,
         }
         stmt = insert(Observation).values(**row).on_conflict_do_update(

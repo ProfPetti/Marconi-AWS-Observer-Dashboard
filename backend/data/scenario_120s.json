@@ -24,6 +24,11 @@
       "warning": 8,
       "critical": 25,
       "unit": "%"
+    },
+    "structural_tilt": {
+      "warning": 2.0,
+      "critical": 5.0,
+      "unit": "°"
     }
   },
   "notes": "SOLO DEMO ACCELERATA: Ice Locking usa campioni di 10 s, NON la regola operativa delle 12 ore. Il Data Gap è perdita di slot simulati, non diagnosi satellitare. RITA: ultima trasmissione a 50 s; da 60 s non arrivano più record. Il gap cresce fino a 7/13 slot mancanti (53,85%).",

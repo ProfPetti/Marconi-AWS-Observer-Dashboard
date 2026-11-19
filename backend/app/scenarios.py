@@ -32,7 +32,8 @@ def scenario_snapshot(codes, step):
                 wind_speed_kt=numeric("wind_speed_kt"),
                 wind_direction_deg=numeric("wind_direction_deg"),
                 humidity_pct=numeric("humidity_pct"),
-                pressure_hpa=numeric("pressure_hpa")))
+                pressure_hpa=numeric("pressure_hpa"),
+                tilt_deg=numeric("tilt_deg")))
     return {
         "scenario": config["scenario"], "step": step,
         "stage": stage["id"], "reference_utc": reference.isoformat(),

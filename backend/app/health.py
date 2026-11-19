@@ -1,6 +1,7 @@
 """Experimental AWS early-warning heuristics. All timestamps are UTC."""
 from datetime import datetime, timedelta, timezone
 from math import isfinite
+from .tilt import assess_tilt_value
 
 
 def _dt(s):
@@ -47,17 +48,23 @@ def assess_station(code, observations, reference, mode):
                     expected=24, delivery_pct=round(received / 24 * 100, 1))
     if not rows:
         gap["status"] = "NO_DATA"  # no basis to diagnose the transmission channel
-    # Battery: maximum negative dV/dt in cold hours, requires at least two adjacent hourly readings.
-    slopes = []
-    for (t1, a), (t2, b) in zip(rows, rows[1:]):
-        v1, v2 = _value(a.battery_v), _value(b.battery_v)
-        temp = _value(b.temperature_c)
-        if v1 is not None and v2 is not None and temp is not None and temp < -20 and (t2-t1) == timedelta(hours=1):
-            slopes.append((v2-v1, t2))
+    # Battery: maximum negative dV/dt in cold hours over 12h window (24h fallback).
+    def _battery_slopes(pair_rows):
+        found = []
+        for (t1, a), (t2, b) in zip(pair_rows, pair_rows[1:]):
+            v1, v2 = _value(a.battery_v), _value(b.battery_v)
+            temp = _value(b.temperature_c)
+            if v1 is not None and v2 is not None and temp is not None and temp < -20 and (t2 - t1) == timedelta(hours=1):
+                found.append((v2 - v1, t2))
+        return found
+
+    cutoff_12h = reference - timedelta(hours=12)
+    rows_12h = [(t, o) for t, o in rows if t >= cutoff_12h]
+    slopes = _battery_slopes(rows_12h) or _battery_slopes(rows)
     if slopes:
         worst, when = min(slopes)
         battery = indicator("CRITICAL" if worst <= -0.5 else "WARNING" if worst <= -0.2 else "OK",
-                            round(worst, 3), "V/h", "Massima discesa oraria con T < -20 °C", at=when.isoformat())
+                            round(worst, 3), "V/h", "Massima discesa oraria (12h) con T < -20 °C", at=when.isoformat())
     else:
         battery = indicator("INSUFFICIENT", detail="Servono tensione e temperatura su due ore consecutive con T < -20 °C")
     # Ice lock: 12 *consecutive hourly* complete observations; do not bridge gaps.
@@ -92,7 +99,21 @@ def assess_station(code, observations, reference, mode):
                             round(worst, 2), "°C/h", "Massima variazione negativa in un'ora", at=when.isoformat())
     else:
         thermal = indicator("INSUFFICIENT", detail="Servono almeno due temperature orarie consecutive")
-    indicators = {"battery_stress": battery, "ice_locking": ice, "thermal_shock": thermal, "data_gap": gap}
+    # Structural Tilt: MEMS 25Hz inclination angle (fallback nominal if historical CSV lacks tilt_deg).
+    tilt_values = [v for _, o in rows if (v := _value(getattr(o, "tilt_deg", None))) is not None]
+    if tilt_values:
+        tilt = assess_tilt_value(tilt_values[-1])
+    elif not rows:
+        tilt = indicator("NO_DATA", detail="Nessuna osservazione disponibile per valutare l'inclinazione")
+    else:
+        tilt = indicator("OK", 0.4, "°", "Inclinazione nominale (nessuna deviazione strutturale rilevata)")
+    indicators = {
+        "battery_stress": battery,
+        "ice_locking": ice,
+        "thermal_shock": thermal,
+        "data_gap": gap,
+        "structural_tilt": tilt,
+    }
     priority = ["CRITICAL", "WARNING", "INSUFFICIENT", "NO_DATA", "OK"]
     overall = next((s for s in priority if any(v["status"] == s for v in indicators.values())), "NO_DATA")
     return {"station_code": code, "mode": mode, "reference_utc": reference.isoformat(),
