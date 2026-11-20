@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { API, BASES, SORT_STATUSES } from "../constants/awsConfig";
 
+const TILT_RECOVERY_COMMENT =
+  'Il sistema cercherà di recuperare lo stato "CRITICAL" tramite un attuatore lineare a cui è collegato il filo di tiraggio in acciaio che servirà a raddrizzare il pilastro della centrale.';
+
 export function useDashboardData() {
   const [stations, setStations] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -35,6 +38,11 @@ export function useDashboardData() {
   const [message, setMessage] = useState("");
   const [stationHistory, setStationHistory] = useState([]);
   const [recovering, setRecovering] = useState(false);
+  const [recoveryComment, setRecoveryComment] = useState("");
+
+  useEffect(() => {
+    setRecoveryComment("");
+  }, [selected]);
 
   const loadStations = useCallback(async () => {
     const r = await fetch(`${API}/api/stations`);
@@ -164,7 +172,7 @@ export function useDashboardData() {
   }, [runScenario]);
 
   const recoverStation = useCallback(
-    async (indicator = "ALL", code = selected) => {
+    async (indicator = "structural_tilt", code = selected) => {
       if (!code || code.startsWith("BASE_")) return;
       setRecovering(true);
       setMessage("");
@@ -240,7 +248,8 @@ export function useDashboardData() {
         }
 
         await loadStationHistory(code, mode);
-        setMessage(`Recupero IoT eseguito su ${code}: ${d.actuator}`);
+        setRecoveryComment(TILT_RECOVERY_COMMENT);
+        setMessage(`Recupero IoT eseguito su ${code}: ${TILT_RECOVERY_COMMENT}`);
       } catch (e) {
         setMessage(e.message);
       } finally {
@@ -399,6 +408,7 @@ export function useDashboardData() {
     message,
     stationHistory,
     recovering,
+    recoveryComment,
     chart,
     counts,
     sortedHealth,

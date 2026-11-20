@@ -12,6 +12,7 @@ export default function DrawerRiskCards({
   healthSelected,
   onRecover,
   recovering = false,
+  recoveryComment = "",
 }) {
   const quickMetrics = [
     { label: "Temp.", val: fmt(latest?.temperature_c, " °C") },
@@ -22,8 +23,8 @@ export default function DrawerRiskCards({
     { label: "Tilt MEMS", val: fmt(healthSelected?.indicators?.structural_tilt?.value ?? latest?.tilt_deg, "°") },
   ];
 
-  const overall = healthSelected?.overall;
-  const needsRecovery = overall === "WARNING" || overall === "CRITICAL";
+  const tiltStatus = healthSelected?.indicators?.structural_tilt?.status;
+  const canRecoverTilt = tiltStatus === "CRITICAL";
 
   return (
     <div className="station-modal-left">
@@ -37,27 +38,34 @@ export default function DrawerRiskCards({
         ))}
       </div>
 
-      {/* Telecomando IoT di Recupero Attivo (Self-Healing AWS) */}
-      {needsRecovery && (
-        <div className={`recovery-command-banner status-${overall.toLowerCase()}`}>
+      {/* Telecomando IoT di Recupero Esclusivo per Structural Tilt (CRITICAL) */}
+      {canRecoverTilt && (
+        <div className="recovery-command-banner status-critical">
           <div className="recovery-banner-head">
-            <strong>Telecomando IoT di Recupero Attivo (Self-Healing AWS)</strong>
-            <span className="recovery-banner-tag">Iridium SBD Bidirezionale</span>
+            <strong>Recupero Strutturale TILT (CRITICAL)</strong>
+            <span className="recovery-banner-tag">Attuatore Lineare Stralli</span>
           </div>
           <p className="recovery-banner-desc">
-            Rilevata anomalia ({overall}). È possibile attivare da remoto gli attuatori di bordo
-            (De-Icing, BMS Tampone, Scudo Termico, Burst Buffer, Tensionatore Stralli).
+            Rilevata inclinazione critica del pilastro AWS. È possibile azionare da remoto
+            l&apos;attuatore lineare collegato al filo di tiraggio in acciaio.
           </p>
           <button
             type="button"
             className="btn-recovery-global"
             disabled={recovering}
-            onClick={() => onRecover?.("ALL")}
+            onClick={() => onRecover?.("structural_tilt")}
           >
             {recovering
-              ? "Trasmissione comando in corso..."
-              : "⚡ Invia Comando di Ripristino Globale AWS"}
+              ? "Attivazione attuatore in corso..."
+              : "⚡ Recupera Stato CRITICAL (TILT)"}
           </button>
+        </div>
+      )}
+
+      {recoveryComment && (
+        <div className="tilt-recovery-comment" role="status">
+          <strong>Procedura di recupero TILT attivata</strong>
+          <p>{recoveryComment}</p>
         </div>
       )}
 
@@ -67,7 +75,7 @@ export default function DrawerRiskCards({
         {RISK_KEYS.map((key) => {
           const ind = healthSelected?.indicators?.[key];
           const status = ind?.status || "NO_DATA";
-          const canRecover = status === "WARNING" || status === "CRITICAL";
+          const showTiltRecover = key === "structural_tilt" && status === "CRITICAL";
           return (
             <article className={`drawer-risk-card card-status-${status.toLowerCase()}`} key={key}>
               <div className="risk-card-head">
@@ -90,14 +98,14 @@ export default function DrawerRiskCards({
                   Vibrazione stralli: {ind?.vibration_rms_deg ?? "0.18"}° RMS (25 Hz)
                 </div>
               )}
-              {canRecover && (
+              {showTiltRecover && (
                 <button
                   type="button"
                   className="btn-card-recover"
                   disabled={recovering}
-                  onClick={() => onRecover?.(key)}
+                  onClick={() => onRecover?.("structural_tilt")}
                 >
-                  {recovering ? "Attivazione..." : "⚡ Attiva Attuatore di Recupero"}
+                  {recovering ? "Attivazione..." : "⚡ Attiva Attuatore Lineare TILT"}
                 </button>
               )}
             </article>

@@ -81,4 +81,4 @@ class HealthHistoryOut(BaseModel):
 
 class RecoveryCommandIn(BaseModel):
     station_code: str
-    indicator: str = "ALL"
+    indicator: str = "structural_tilt"

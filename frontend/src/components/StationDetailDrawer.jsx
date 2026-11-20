@@ -25,6 +25,7 @@ export default function StationDetailDrawer({
   mode = "SIMULATED", latest, chart = [], healthSelected,
   timelineData, scenarioStep, scenarioHistory = [],
   stationHistory = [], onRecover, recovering = false,
+  recoveryComment = "",
 }) {
   const [chartTab, setChartTab] = useState(timelineData ? "sim" : "temp");
 
@@ -135,6 +136,7 @@ export default function StationDetailDrawer({
                 healthSelected={healthSelected}
                 onRecover={onRecover}
                 recovering={recovering}
+                recoveryComment={recoveryComment}
               />
 
               <div className="station-modal-right">

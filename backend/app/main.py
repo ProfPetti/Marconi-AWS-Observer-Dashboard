@@ -488,7 +488,7 @@ RECOVERY_ACTUATORS = {
     "ice_locking": "Attivazione Riscaldatore Anti-Ghiaccio Anemometro (De-Icing Nichrome 15W)",
     "thermal_shock": "Attivazione Scudo Termico Attivo e Parzializzazione Ventole Box Datalogger",
     "data_gap": "Ritrasmissione Burst Satellitare Iridium SBD dal Buffer Locale MicroSD",
-    "structural_tilt": "Azionamento Tensionatore Elettromeccanico Stralli + Ricalibrazione Zero MEMS 25Hz",
+    "structural_tilt": 'Il sistema cercherà di recuperare lo stato "CRITICAL" tramite un attuatore lineare a cui è collegato il filo di tiraggio in acciaio che servirà a raddrizzare il pilastro della centrale.',
 }
 
 
@@ -542,7 +542,7 @@ def recover_aws_station(payload: RecoveryCommandIn, db: Session = Depends(get_db
     if not db.get(Station, code):
         raise HTTPException(400, f"Codice stazione sconosciuto: {code}")
 
-    indicator_key = (payload.indicator or "ALL").strip()
+    indicator_key = (payload.indicator or "structural_tilt").strip()
     if indicator_key == "ALL":
         targets = list(RECOVERY_ACTUATORS.keys())
     elif indicator_key in RECOVERY_ACTUATORS:
@@ -625,7 +625,7 @@ def recover_aws_station(payload: RecoveryCommandIn, db: Session = Depends(get_db
         db,
         new_assessment,
         event_type="REMOTE_RECOVERY",
-        note=f"Telecomando eseguito: {actions_desc}",
+        note=actions_desc,
         timestamp_override=datetime.now(timezone.utc).isoformat(),
         force=True,
     )

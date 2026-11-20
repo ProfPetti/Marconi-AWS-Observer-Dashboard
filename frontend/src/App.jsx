@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import landingHtmlRaw from "../../Landing/index.html?raw";
 import PolarMap from "./components/PolarMap.jsx";
 import { getSmartStationZoom } from "./components/polarMapConfig";
 import StationCard from "./components/StationCard.jsx";
@@ -12,7 +13,36 @@ import { useAlertDirector } from "./hooks/useAlertDirector";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { BASES } from "./constants/awsConfig";
 
+const DEMO_BRIDGE_SCRIPT = `<script>
+document.addEventListener("click", function (e) {
+  var anchor = e.target.closest('a[href^="#"]');
+  if (anchor) {
+    var id = anchor.getAttribute("href").slice(1);
+    var target = id ? document.getElementById(id) : null;
+    if (target) {
+      e.preventDefault();
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    return;
+  }
+  var link = e.target.closest('a[href="demo.html"]');
+  if (link) {
+    e.preventDefault();
+    window.parent.postMessage("MARCONI_ENTER_DEMO", "*");
+  }
+});
+</script>`;
+
+const LANDING_SRCDOC = landingHtmlRaw.includes("</body>")
+  ? landingHtmlRaw.replace("</body>", `${DEMO_BRIDGE_SCRIPT}</body>`)
+  : `${landingHtmlRaw}${DEMO_BRIDGE_SCRIPT}`;
+
 export default function App() {
+  const [showDashboard, setShowDashboard] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get("demo") === "1" ||
+      window.location.pathname.endsWith("/demo.html"),
+  );
   const data = useDashboardData();
   const menuBtnRef = useRef(null);
   const manualSeqRef = useRef(0);
@@ -77,6 +107,36 @@ export default function App() {
     data.setScenarioPlaying,
     director.isBusy,
   ]);
+
+  useEffect(() => {
+    if (showDashboard) return undefined;
+    const handleMessage = (event) => {
+      if (event.data === "MARCONI_ENTER_DEMO") {
+        window.history.replaceState(null, "", "?demo=1");
+        setShowDashboard(true);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [showDashboard]);
+
+  if (!showDashboard) {
+    return (
+      <iframe
+        title="MARCONI AWS Observer Dashboard"
+        srcDoc={LANDING_SRCDOC}
+        style={{
+          position: "fixed",
+          inset: 0,
+          width: "100vw",
+          height: "100vh",
+          border: "none",
+          display: "block",
+          background: "#ffffff",
+        }}
+      />
+    );
+  }
 
   return (
     <main className="windy-shell">
@@ -158,6 +218,11 @@ export default function App() {
         message={data.message}
         onGenerateDemo={data.generateDemo}
         onImportCSV={data.importCSV}
+        onBackToLanding={() => {
+          data.setIsMenuOpen(false);
+          window.history.replaceState(null, "", "/");
+          setShowDashboard(false);
+        }}
       />
 
       {/* Alert Spotlight durante la regia automatica (Spec §4.3) */}
@@ -208,6 +273,7 @@ export default function App() {
         stationHistory={data.stationHistory}
         onRecover={data.recoverStation}
         recovering={data.recovering}
+        recoveryComment={data.recoveryComment}
       />
 
       {/* 6. Modal Centro Salute (17 AWS) */}

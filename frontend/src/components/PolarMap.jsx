@@ -10,6 +10,11 @@ import {
 } from "react-leaflet";
 import { BASES } from "../constants/awsConfig";
 import {
+  MIN_MAP_ZOOM,
+  AWS_MIN_ZOOM,
+  MAX_MAP_ZOOM,
+  POLAR_EXTENT_M,
+  POLAR_RESOLUTIONS,
   polarCRS,
   wmsEndpoint,
   wmsBase,
@@ -24,9 +29,9 @@ export const bases = BASES;
  */
 function computeClusterOffsets(items, zoom) {
   const offsets = {};
-  if (zoom >= 9 || items.length < 2) return offsets;
+  if (zoom < AWS_MIN_ZOOM || zoom >= 9 || items.length < 2) return offsets;
 
-  const minDistPx = 22;
+  const minDistPx = 18;
   const projected = items
     .filter((it) => it.latitude != null && it.longitude != null)
     .map((it) => ({
@@ -55,7 +60,7 @@ function computeClusterOffsets(items, zoom) {
     }
     if (group.length >= 2) {
       group.sort((a, b) => a.code.localeCompare(b.code));
-      const radius = Math.max(14, group.length * 4.5);
+      const radius = Math.max(8, group.length * 2.5);
       group.forEach((member, idx) => {
         const angle = (2 * Math.PI * idx) / group.length - Math.PI / 4;
         offsets[member.code] = {
@@ -89,9 +94,9 @@ function createStationDotIcon(name, active, status, offset = { dx: 0, dy: 0 }) {
   });
 }
 
-function createBaseDotIcon(name, active, offset = { dx: 0, dy: 0 }) {
+function createBaseDotIcon(name, active, offset = { dx: 0, dy: 0 }, forceLabel = false) {
   const activeClass = active ? "is-selected" : "";
-  const labelAlways = active ? "always-visible" : "";
+  const labelAlways = active || forceLabel ? "always-visible" : "";
   return L.divIcon({
     className: "base-dot-marker-wrap",
     html: `
@@ -103,6 +108,81 @@ function createBaseDotIcon(name, active, offset = { dx: 0, dy: 0 }) {
     iconSize: [14, 14],
     iconAnchor: [7 - offset.dx, 7 - offset.dy],
   });
+}
+
+function MapBoundsEnforcer() {
+  const map = useMap();
+  const clampingRef = useRef(false);
+
+  useEffect(() => {
+    const EDGE_PAD_PX = 4;
+    const WORLD_SIZE_M = POLAR_EXTENT_M * 2;
+
+    const computeMinZoom = () => {
+      const size = map.getSize();
+      const needed = Math.max(size.x, size.y) + EDGE_PAD_PX * 2;
+      const idx = POLAR_RESOLUTIONS.findIndex((r) => WORLD_SIZE_M / r >= needed);
+      return Math.max(MIN_MAP_ZOOM, idx === -1 ? 3 : idx);
+    };
+
+    const clampView = () => {
+      if (clampingRef.current) return;
+      const zoom = map.getZoom();
+      const res = POLAR_RESOLUTIONS[Math.round(zoom)];
+      if (!res) return;
+
+      const mapSizePx = WORLD_SIZE_M / res;
+      const size = map.getSize();
+      const halfW = size.x / 2 + EDGE_PAD_PX;
+      const halfH = size.y / 2 + EDGE_PAD_PX;
+      const centerPt = map.project(map.getCenter(), zoom);
+
+      const clampedX =
+        mapSizePx <= halfW * 2
+          ? mapSizePx / 2
+          : Math.min(Math.max(centerPt.x, halfW), mapSizePx - halfW);
+      const clampedY =
+        mapSizePx <= halfH * 2
+          ? mapSizePx / 2
+          : Math.min(Math.max(centerPt.y, halfH), mapSizePx - halfH);
+
+      if (Math.abs(clampedX - centerPt.x) > 0.5 || Math.abs(clampedY - centerPt.y) > 0.5) {
+        clampingRef.current = true;
+        try {
+          const targetLatLng = map.unproject(L.point(clampedX, clampedY), zoom);
+          map.setView(targetLatLng, zoom, { animate: false });
+        } finally {
+          clampingRef.current = false;
+        }
+      }
+    };
+
+    const syncMinZoomAndClamp = () => {
+      const minZ = computeMinZoom();
+      if (map.getMinZoom() !== minZ) {
+        map.setMinZoom(minZ);
+      }
+      if (map.getZoom() < minZ) {
+        map.setZoom(minZ, { animate: false });
+      }
+      clampView();
+    };
+
+    syncMinZoomAndClamp();
+    map.on("move", clampView);
+    map.on("moveend", clampView);
+    map.on("zoomend", clampView);
+    map.on("resize", syncMinZoomAndClamp);
+
+    return () => {
+      map.off("move", clampView);
+      map.off("moveend", clampView);
+      map.off("zoomend", clampView);
+      map.off("resize", syncMinZoomAndClamp);
+    };
+  }, [map]);
+
+  return null;
 }
 
 function MapCameraController({ focusTarget }) {
@@ -150,9 +230,16 @@ function MapZoomControls({ onResetOverview }) {
   const map = useMap();
   const containerRef = useRef(null);
   const [zoom, setZoom] = useState(() => map.getZoom());
+  const [minZoom, setMinZoom] = useState(() => map.getMinZoom());
 
   useMapEvents({
-    zoomend: () => setZoom(map.getZoom()),
+    zoomend: () => {
+      setZoom(map.getZoom());
+      setMinZoom(map.getMinZoom());
+    },
+    resize: () => {
+      setMinZoom(map.getMinZoom());
+    },
   });
 
   useEffect(() => {
@@ -162,45 +249,58 @@ function MapZoomControls({ onResetOverview }) {
     }
   }, []);
 
+  const zoomPct = Math.round((zoom / MAX_MAP_ZOOM) * 100);
+
   return (
-    <div ref={containerRef} className="map-zoom-controls" aria-label="Controlli zoom mappa">
-      <button
-        type="button"
-        className="map-zoom-btn"
-        onClick={() => map.zoomIn()}
-        disabled={zoom >= map.getMaxZoom()}
-        title="Zoom avanti (+)"
-        aria-label="Zoom avanti"
-      >
-        +
-      </button>
-      <span className="map-zoom-level tabular-nums" title="Livello zoom corrente">
-        z{zoom}
-      </span>
-      <button
-        type="button"
-        className="map-zoom-btn"
-        onClick={() => map.zoomOut()}
-        disabled={zoom <= map.getMinZoom()}
-        title="Zoom indietro (-)"
-        aria-label="Zoom indietro"
-      >
-        −
-      </button>
-      <button
-        type="button"
-        className="map-zoom-btn map-zoom-reset"
-        onClick={() => {
-          map.stop();
-          map.flyTo([BASES[1].latitude, BASES[1].longitude], 3, { duration: 0.9 });
-          onResetOverview?.();
-        }}
-        title="Vista panoramica Antartide (z3)"
-        aria-label="Reset vista panoramica"
-      >
-        ⌖
-      </button>
-    </div>
+    <>
+      <div ref={containerRef} className="map-zoom-controls" aria-label="Controlli zoom mappa">
+        <button
+          type="button"
+          className="map-zoom-btn"
+          onClick={() => map.zoomIn()}
+          disabled={zoom >= map.getMaxZoom()}
+          title="Zoom avanti (+)"
+          aria-label="Zoom avanti"
+        >
+          +
+        </button>
+        <span
+          className="map-zoom-level tabular-nums"
+          title={`Livello zoom corrente: z${zoom} (${zoomPct}%)`}
+        >
+          <span>z{zoom}</span>
+          <small>{zoomPct}%</small>
+        </span>
+        <button
+          type="button"
+          className="map-zoom-btn"
+          onClick={() => map.zoomOut()}
+          disabled={zoom <= minZoom}
+          title="Zoom indietro (-)"
+          aria-label="Zoom indietro"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className="map-zoom-btn map-zoom-reset"
+          onClick={() => {
+            map.stop();
+            map.flyTo([BASES[1].latitude, BASES[1].longitude], 3, { duration: 0.9 });
+            onResetOverview?.();
+          }}
+          title="Vista panoramica Antartide (z3 · 30%)"
+          aria-label="Reset vista panoramica"
+        >
+          ⌖
+        </button>
+      </div>
+      {zoom < AWS_MIN_ZOOM && (
+        <div className="map-zoom-poi-notice tabular-nums" role="status">
+          Zoom {zoomPct}% (&lt; 50%): visibili solo Sedi MZS e Concordia — Aumenta lo zoom (≥ 50%) per le 17 centrali AWS
+        </div>
+      )}
+    </>
   );
 }
 
@@ -219,49 +319,56 @@ function MapMarkersLayer({
     click: () => onSelect?.(null),
   });
 
+  const showAwsMarkers = zoom >= AWS_MIN_ZOOM;
   const clusterOffsets = useMemo(
-    () => computeClusterOffsets([...stations, ...BASES], zoom),
+    () => computeClusterOffsets(stations, zoom),
     [stations, zoom],
   );
 
   return (
     <>
-      {stations.map((s) => {
-        const h = health.find((x) => x.station_code === s.code);
-        let metricStatus = "NO_DATA";
-        if (h) {
-          metricStatus =
-            activeLayerMetric === "overall"
-              ? h.overall || "NO_DATA"
-              : h.indicators?.[activeLayerMetric]?.status || "NO_DATA";
-        }
-        const active = selected === s.code;
-        const icon = createStationDotIcon(
-          s.name,
-          active,
-          metricStatus,
-          clusterOffsets[s.code],
-        );
+      {showAwsMarkers &&
+        stations.map((s) => {
+          const h = health.find((x) => x.station_code === s.code);
+          let metricStatus = "NO_DATA";
+          if (h) {
+            metricStatus =
+              activeLayerMetric === "overall"
+                ? h.overall || "NO_DATA"
+                : h.indicators?.[activeLayerMetric]?.status || "NO_DATA";
+          }
+          const active = selected === s.code;
+          const icon = createStationDotIcon(
+            s.name,
+            active,
+            metricStatus,
+            clusterOffsets[s.code],
+          );
 
-        return (
-          <Marker
-            key={s.code}
-            position={[s.latitude, s.longitude]}
-            icon={icon}
-            zIndexOffset={active ? 1000 : 100}
-            eventHandlers={{
-              click: (e) => {
-                L.DomEvent.stopPropagation(e);
-                onSelect?.(s.code);
-              },
-            }}
-          />
-        );
-      })}
+          return (
+            <Marker
+              key={s.code}
+              position={[s.latitude, s.longitude]}
+              icon={icon}
+              zIndexOffset={active ? 1000 : 100}
+              eventHandlers={{
+                click: (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  onSelect?.(s.code);
+                },
+              }}
+            />
+          );
+        })}
 
       {BASES.map((b) => {
         const active = selected === b.code;
-        const icon = createBaseDotIcon(b.name, active, clusterOffsets[b.code]);
+        const icon = createBaseDotIcon(
+          b.name,
+          active,
+          { dx: 0, dy: 0 },
+          zoom < AWS_MIN_ZOOM,
+        );
         return (
           <Marker
             key={b.code}
@@ -302,9 +409,11 @@ export default function PolarMap({
       crs={polarCRS}
       center={[BASES[1].latitude, BASES[1].longitude]}
       zoom={3}
-      minZoom={0}
-      maxZoom={10}
+      minZoom={MIN_MAP_ZOOM}
+      maxZoom={MAX_MAP_ZOOM}
       zoomControl={false}
+      inertia={false}
+      bounceAtZoomLimits={true}
     >
       <WMSTileLayer
         key={mapLayer}
@@ -315,6 +424,7 @@ export default function PolarMap({
         maxNativeZoom={7}
       />
       <ScaleControl position="bottomleft" />
+      <MapBoundsEnforcer />
       <MapCameraController focusTarget={focusTarget} />
       <MapZoomControls onResetOverview={onResetOverview} />
       <MapMarkersLayer

@@ -58,3 +58,19 @@ Allineamento al 100% del progetto **Marconi AWS Observer Dashboard** rispetto al
 ### Phase 5: Redesign UI/UX Mission-Control & Menu Hamburger (`frontend-ui-engineering`)
 - [x] Task 11: Riprogettare il **Menu Hamburger (`ControlMenu.jsx`, `ControlMenuLayers.jsx`, `ControlMenuDataSection.jsx`, `icons.jsx`, `App.jsx`)** con estetica *Antarctic Mission Control* (glassmorphism avanzato, barra proporzionale di salute della rete, accesso rapido con 1 click alle stazioni in allarme `CRITICAL`/`WARNING`, griglia 2x3 simmetrica con icone dedicate per i 6 Layer Diagnostici, selettore stazione customizzato e trigger hamburger arricchito con badge allarmi).
 - [x] Task 12: Rifinire la UI/UX globale della dashboard (`styles.css`, `StationCard.jsx`, `TimelineBar.jsx`, `StationDetailDrawer.jsx`) migliorando profondità visiva, micro-interazioni, barra di progresso continua nella `TimelineBar`, accenti cromatici semantici sulle card in allarme e leggibilità tipografica.
+
+---
+
+### Phase 6: Visibilità POI per Soglia Zoom, Landing Page Root (`/Landing`) e Recupero Esclusivo TILT (`CRITICAL`)
+- [x] Task 13: **Visibilità POI AWS basata su Soglia Percentuale di Zoom (`PolarMap.jsx`, `polarMapConfig.js`, `styles.css`)**:
+  - Definire la soglia di zoom `AWS_MIN_ZOOM = 5` (`50%` della scala `z0..z10`).
+  - Quando `zoom < 5` (`< 50%`), nascondere i marker delle 17 centrali AWS e mostrare **solo** i POI delle 2 Sedi (`Base Mario Zucchelli` e `Base Concordia`) ancorati esattamente alle rispettive coordinate geografiche (`offset = { dx: 0, dy: 0 }`, esclusi da `computeClusterOffsets`).
+  - Quando `zoom >= 5` (`>= 50%`, vista ravvicinata alla terraferma), far ricomparire le 17 centrali AWS con offset di de-clustering contenuti e mai applicati alle Basi.
+  - Mostrare nei controlli zoom la percentuale (`{zoom * 10}%`) oltre a `z{zoom}` e un badge informativo compatto quando le AWS sono nascoste per zoom ridotto.
+- [x] Task 14: **Landing Page iniziale sotto `/Landing` a livello root con pulsante DEMO (`Landing/`, `frontend/vite.config.js`, `frontend/src/App.jsx`, `frontend/src/styles.css`)**:
+  - Verificare eventuale presenza su remote (`git pull` / `origin/main`) o creare/integrare la cartella `/Landing` a livello root del repository.
+  - Impostare la Landing Page come **pagina iniziale** all'apertura dell'applicazione.
+  - In fondo alla Landing Page, il pulsante **DEMO** consente il passaggio diretto alla piattaforma **Marconi AWS Observer** (con possibilità di tornare alla Landing dal menu).
+- [x] Task 15: **Recupero Attivo limitato al solo indicatore `Structural Tilt` in stato `CRITICAL` (`DrawerRiskCards.jsx`, `StationDetailDrawer.jsx`, `useDashboardData.js`, `backend/app/main.py`)**:
+  - Rimuovere il pulsante di recupero dagli altri 4 indicatori e dal recupero globale indistinto; mostrare il pulsante di recupero **esclusivamente** quando l'indicatore **`structural_tilt` (TILT)** si trova nello stato **`CRITICAL`**.
+  - Al click sul pulsante di recupero del TILT, eseguire il ripristino dell'inclinazione e riportare nel pannello e nello storico il commento esplicito: *"Il sistema cercherà di recuperare lo stato CRITICAL tramite un attuatore lineare a cui è collegato il filo di tiraggio in acciaio che servirà a raddrizzare il pilastro della centrale."*

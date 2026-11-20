@@ -107,3 +107,47 @@
 - [x] **StationCard (`StationCard.jsx`)**: bordo superiore/laterale semantico in base allo stato (`NORMAL`, `WARNING`, `CRITICAL`), griglia metriche istantanee ben spaziata e bottone primario `"Analisi, Grafici & Telecomando"` con effetto hover luminoso.
 - [x] **TimelineBar (`TimelineBar.jsx`)**: barra di avanzamento colorata continua dietro i pallini degli step, badge `"SIM 120s"` e migliore leggibilità del timer.
 - [x] **StationDetailDrawer (`StationDetailDrawer.jsx`)**: card dei 5 indicatori con bordo sinistro colorato semanticamente (`status-ok`, `status-warning`, `status-critical`) per una scansione visiva immediata.
+
+---
+
+## Task 13: Soglia Percentuale Zoom e Visibilità POI AWS vs Basi MZS/Concordia (`PolarMap.jsx`, `polarMapConfig.js`, `styles.css`)
+**Description:** Eliminare lo disallineamento fuori terraferma dei marker ai bassi livelli di zoom stabilendo una soglia percentuale di zoom (`50%` / `z5` su scala `0..10`): sotto tale soglia le 17 centrali AWS scompaiono lasciando visibili solo le Sedi Base Mario Zucchelli (MZ) e Base Concordia perfettamente allineate alle loro coordinate reali; incrementando lo zoom (`>= 50%` / `z5+`), le centrali AWS ricompaiono sulla terraferma.
+**Acceptance criteria:**
+- [x] Costante `AWS_MIN_ZOOM = 5` (`50%` del range `0..10`) esportata in `polarMapConfig.js`.
+- [x] In `PolarMap.jsx`, `BASES` non subiscono mai offset da `computeClusterOffsets` (`offset = { dx: 0, dy: 0 }`) così da restare sempre perfettamente allineate alla terraferma a qualsiasi zoom.
+- [x] Quando `zoom < AWS_MIN_ZOOM` (`< 50%`), i marker `stations` (AWS) sono nascosti e restano visibili solo `BASE_MZS` e `BASE_CONCORDIA` (con etichette visibili).
+- [x] Quando `zoom >= AWS_MIN_ZOOM` (`>= 50%`), i marker delle 17 AWS ricompaiono; `computeClusterOffsets` opera solo sulle AWS a `zoom >= 5` con raggio ridotto per evitare spostamenti in mare.
+- [x] `MapZoomControls` mostra la percentuale di zoom (`{zoom * 10}%`) e un indicatore informa l'utente quando `zoom < 50%` che aumentando lo zoom (`>= 50%`) ricompaiono le centrali AWS.
+**Verification:**
+- [x] Build frontend (`npm run build`) senza errori e verifica codice soglia `z3` (`30%`) vs `z5+` (`50%+`).
+**Dependencies:** None
+**Files likely touched:** `frontend/src/components/polarMapConfig.js`, `frontend/src/components/PolarMap.jsx`, `frontend/src/styles.css`
+**Estimated scope:** Small (2-3 files)
+
+## Task 14: Landing Page in `/Landing` a livello root come Pagina Iniziale con pulsante DEMO (`Landing/`, `vite.config.js`, `App.jsx`, `styles.css`)
+**Description:** Integrare la Landing Page dalla cartella `/Landing` a livello root del progetto come schermata iniziale dell'applicazione, con pulsante `DEMO` in fondo alla pagina che porta alla piattaforma `Marconi AWS Observer`.
+**Acceptance criteria:**
+- [x] Verificare se `Landing/` è presente su remote (`git fetch` / `git status`) o crearla/aggiornarla in `/Landing` a livello root.
+- [x] Configurare Vite (`frontend/vite.config.js`) e `frontend/src/App.jsx` affinché all'avvio venga mostrata come pagina iniziale la Landing Page.
+- [x] In fondo alla Landing Page è presente il pulsante **DEMO** che, al click, apre la piattaforma interattiva **Marconi AWS Observer**.
+**Verification:**
+- [x] Build frontend (`npm run build`) eseguita con successo e verifica routing Landing -> click `DEMO` -> Dashboard.
+**Dependencies:** None
+**Files likely touched:** `Landing/*`, `frontend/vite.config.js`, `frontend/src/App.jsx`, `frontend/src/styles.css`
+**Estimated scope:** Medium (3-4 files)
+
+## Task 15: Recupero Attivo Esclusivo per TILT (`CRITICAL`) con Attuatore Lineare Filo di Tiraggio (`DrawerRiskCards.jsx`, `useDashboardData.js`, `backend/app/main.py`)
+**Description:** Limitare l'azione del pulsante di recupero nel pannello specifico dell'AWS esclusivamente al caso in cui l'indicatore `Structural Tilt` (`structural_tilt`) sia nello stato `CRITICAL`, mostrando al click il commento tecnico sull'attuatore lineare collegato al filo di tiraggio in acciaio per raddrizzare il pilastro della centrale.
+**Acceptance criteria:**
+- [x] In `DrawerRiskCards.jsx`, rimuovere i pulsanti di recupero dagli altri 4 indicatori (`battery_stress`, `ice_locking`, `thermal_shock`, `data_gap`) e mostrare l'azione di recupero **solo** per `structural_tilt` quando il suo stato è `CRITICAL`.
+- [x] Quando si clicca sul pulsante di recupero per il TILT, viene mostrato nel pannello dell'AWS (e salvato nella nota dello storico `StationHealthLog`) il commento: *"Il sistema cercherà di recuperare lo stato \"CRITICAL\" tramite un attuatore lineare a cui è collegato il filo di tiraggio in acciaio che servirà a raddrizzare il pilastro della centrale."*
+- [x] `backend/app/main.py` (`RECOVERY_ACTUATORS["structural_tilt"]` e `/api/aws-health/recover`) e `useDashboardData.js` riportano il commento richiesto e ripristinano l'inclinazione a `NORMAL`.
+**Verification:**
+- [x] Test API `/api/aws-health/recover` su stazione con Tilt `CRITICAL` (`PAOLA`: `CRITICAL -> OK`, nota `REMOTE_RECOVERY` in `StationHealthLog`) e build frontend (`npm run build`).
+**Dependencies:** None
+**Files likely touched:** `frontend/src/components/DrawerRiskCards.jsx`, `frontend/src/components/StationDetailDrawer.jsx`, `frontend/src/hooks/useDashboardData.js`, `backend/app/main.py`
+**Estimated scope:** Medium (3-4 files)
+
+## Checkpoint: After Tasks 13-15
+- [x] Build frontend (`npm run build`) e test backend completati senza errori.
+- [x] Tutti e 3 i punti richiesti verificati.

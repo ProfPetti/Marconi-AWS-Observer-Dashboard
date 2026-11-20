@@ -4,13 +4,19 @@ import "proj4leaflet";
 import { BASES } from "../constants/awsConfig";
 
 // EPSG:3031 Antarctic polar stereographic (zoom 0..10 down to 16 m/px for tight station clusters)
+export const MIN_MAP_ZOOM = 2;
+export const AWS_MIN_ZOOM = 5;
+export const MAX_MAP_ZOOM = 10;
+export const POLAR_EXTENT_M = 4194304;
+export const POLAR_RESOLUTIONS = [16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16];
+
 export const polarCRS = new L.Proj.CRS(
   "EPSG:3031",
   "+proj=stere +lat_0=-90 +lat_ts=-71 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
   {
-    origin: [-4194304, 4194304],
-    resolutions: [16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16],
-    bounds: L.bounds([-4194304, -4194304], [4194304, 4194304]),
+    origin: [-POLAR_EXTENT_M, POLAR_EXTENT_M],
+    resolutions: POLAR_RESOLUTIONS,
+    bounds: L.bounds([-POLAR_EXTENT_M, -POLAR_EXTENT_M], [POLAR_EXTENT_M, POLAR_EXTENT_M]),
   },
 );
 

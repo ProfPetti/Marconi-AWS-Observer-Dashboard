@@ -34,6 +34,7 @@ export default function ControlMenu({
   message,
   onGenerateDemo,
   onImportCSV,
+  onBackToLanding,
 }) {
   const menuRef = useRef(null);
   const closeBtnRef = useRef(null);
@@ -282,6 +283,16 @@ export default function ControlMenu({
           onGenerateDemo={onGenerateDemo}
           onImportCSV={onImportCSV}
         />
+
+        {onBackToLanding && (
+          <button
+            type="button"
+            className="menu-landing-back-btn"
+            onClick={onBackToLanding}
+          >
+            ← Torna alla Landing Page
+          </button>
+        )}
       </aside>
     </div>
   );
